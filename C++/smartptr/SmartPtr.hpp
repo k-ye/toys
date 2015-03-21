@@ -33,7 +33,7 @@ public:
 	}
 
 	// copy assignment
-	SmartPointer<T>& operator=(SmartPointer<T>& sp) {
+	SmartPointer<T>& operator=(const SmartPointer<T>& sp) {
 		if (this != &sp) {
 			decreaseRef();
 			_ptr = sp._ptr;
