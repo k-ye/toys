@@ -11,26 +11,34 @@
 #define IS_ALIGNED(addr) (addr % DSIZE == 0)
 // calculate the size that satisfies the alignment requirement
 #define ALIGNED_SIZE(sz) (IS_ALIGNED(sz) ? sz : ((sz + DSIZE - 1) / DSIZE) * DSIZE)
-// block metadata size has to be aligned so that data address is correctly aligned
+// aligned block metadata size has to be aligned so that data address is correctly aligned
 #define META_SIZE (ALIGNED_SIZE(sizeof(m61_blockmeta)))
+// aligned tail data size
+#define TAIL_SIZE (ALIGNED_SIZE(sizeof(taildata_type)))
 // convert from the malloced ptr to the data ptr
 #define DATA_PTR(mp) (mp + META_SIZE)
 // convert from the data ptr to actual malloced ptr
 #define MALLOC_PTR(dp) (dp - META_SIZE)
 // initialize the metadata stored in a block
-#define INIT_BLOCK_META(mp) { m61_blockmeta meta = {0, 0}; memcpy(mp, &meta, META_SIZE); }
+#define INIT_BLOCK_META(mp) { m61_blockmeta meta = {0, 0, 0}; memcpy(mp, &meta, META_SIZE); }
+// return the metadata pointer of a given block, using malloced ptr (NOT data ptr)
+#define BLK_META_PTR(mp) ((m61_blockmeta *)(mp))
 // set the block size meta information
-#define SET_BLOCK_SIZE(mp, sz) (((m61_blockmeta *)(mp))->block_size = sz)
+#define SET_BLOCK_SIZE(mp, sz) (BLK_META_PTR(mp)->block_size = sz)
 // get the malloced block size stored in m61_blockmeta struct from malloced ptr (NOT data ptr)
-#define GET_BLOCK_SIZE(mp) (((m61_blockmeta *)(mp))->block_size)
+#define GET_BLOCK_SIZE(mp) (BLK_META_PTR(mp)->block_size)
 // flag the block as allocated
-#define SET_BLOCK_ALLOC(mp) (((m61_blockmeta *)(mp))->alloced = 1)
-
-#define META_DATA_PTR(mp)
+#define SET_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced = 1)
 // flag the block as freed
-#define SET_BLOCK_FREE(mp) (((m61_blockmeta *)(mp))->alloced = 0)
+#define SET_BLOCK_FREE(mp) (BLK_META_PTR(mp)->alloced = 0)
 // check if the block is being freed
-#define IS_BLOCK_ALLOC(mp) (((m61_blockmeta *)(mp))->alloced == 1)
+#define IS_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced == 1)
+
+#define OBSV_TAIL_DATA(mp) (*((taildata_type *)(mp + META_SIZE + ALIGNED_SIZE(GET_BLOCK_SIZE(mp)))))
+
+#define INIT_TAIL_DATA(mp) (BLK_META_PTR(mp)->tail_data = OBSV_TAIL_DATA(mp))
+
+#define IS_TAIL_DATA_INTACT(mp) (BLK_META_PTR(mp)->tail_data == OBSV_TAIL_DATA(mp))
 
 // global variables for stats
 struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
@@ -40,8 +48,8 @@ void* m61_malloc(size_t sz, const char* file, int line) {
     // Your code here.
     if (sz == 0) return NULL;
     // adjusted size for 8 byte alignment
-    size_t asize = ALIGNED_SIZE(sz + META_SIZE);
-    // asize < sz => sz is too large that asize overflows
+    size_t asize = ALIGNED_SIZE(sz) + META_SIZE + TAIL_SIZE;
+    // asize < sz means sz is too large that asize overflows
     void* ptr = (asize < sz) ? NULL : malloc(asize);
     if (ptr == NULL) {
         // malloc failed
@@ -56,6 +64,7 @@ void* m61_malloc(size_t sz, const char* file, int line) {
         INIT_BLOCK_META(ptr);
         SET_BLOCK_SIZE(ptr, sz);
         SET_BLOCK_ALLOC(ptr);
+        INIT_TAIL_DATA(ptr);
 
         if ((char *)ptr < global_stats.heap_min) global_stats.heap_min = ptr;
         if ((char *)(ptr+asize) > global_stats.heap_max) global_stats.heap_max = (ptr+asize);
@@ -75,9 +84,10 @@ void m61_free(void *ptr, const char *file, int line) {
             } else {
                 if (!IS_ALIGNED((unsigned int)ptr)) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not allocated\n", file, line, (unsigned int)ptr);
-                }
-                else if (!IS_BLOCK_ALLOC(ptr)) {
+                } else if (!IS_BLOCK_ALLOC(ptr)) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
+                } else if (!IS_TAIL_DATA_INTACT(ptr)) {
+                    printf("MEMORY BUG: %s:%d: detected wild write during free of pointer 0x%x\n", file, line, (unsigned int)ptr);
                 } else {
                     global_stats.nactive--;
                     global_stats.active_size -= GET_BLOCK_SIZE(ptr);

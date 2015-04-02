@@ -6,10 +6,10 @@
 
 int main() {
     int* ptr = (int*) malloc(sizeof(int) * 10);
-    printf("before writing: %lu\n", ptr);
+    //printf("before writing: %lu\n", ptr);
     for (int i = 0; i <= 10 /* Whoops! Should be < */; ++i)
         ptr[i] = i;
-    printf("after writing: %lu\n", ptr);
+    //printf("after writing: %lu\n", ptr);
     free(ptr);
     m61_printstatistics();
 }

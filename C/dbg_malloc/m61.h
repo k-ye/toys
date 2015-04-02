@@ -18,10 +18,11 @@ struct m61_statistics {
     char* heap_max;                     // largest allocated addr
 };
 
+typedef unsigned long taildata_type;
 typedef struct m61_block_meta {
 		size_t block_size; // size requested, not adjusted aligned size
 		char alloced; // flag of alloc/free status
-        unsigned long long tail_data; // the data beyond the tail, for boundary write error detection
+        taildata_type tail_data; // the data beyond the tail as an intact checker, for boundary write error detection
 }m61_blockmeta;
 
 void m61_getstatistics(struct m61_statistics* stats);
