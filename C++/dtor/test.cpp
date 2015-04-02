@@ -91,11 +91,19 @@ void test3_rtmerror() {
 	cout << endl;
 }
 
+void test_ref(PolyBase& p) {
+	cout << "Test 4: passing polymorphism by reference" << endl;
+	p.print();
+}
+
 int main() {
 	test1();
 	test2();
 	#if 0
 	test3_rtmerror();
 	#endif
+
+	PolyDerived p;
+	test_ref(p);
 	return 0;
 }
