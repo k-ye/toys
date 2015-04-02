@@ -34,10 +34,12 @@
 // check if the block is being freed
 #define IS_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced == 1)
 
-#define OBSV_TAIL_DATA(mp) (*((taildata_type *)(mp + META_SIZE + ALIGNED_SIZE(GET_BLOCK_SIZE(mp)))))
-
-#define INIT_TAIL_DATA(mp) (BLK_META_PTR(mp)->tail_data = OBSV_TAIL_DATA(mp))
-
+#define TAIL_DATA_PTR(mp) ((taildata_type *)(mp + META_SIZE + ALIGNED_SIZE(GET_BLOCK_SIZE(mp))))
+// peek the current data stored in tail
+#define OBSV_TAIL_DATA(mp) (*TAIL_DATA_PTR)
+// initialize the tail data
+#define INIT_TAIL_DATA(mp) ( *TAIL_DATA_PTR(mp) = 0xf0f0; BLK_META_PTR(mp)->tail_data = OBSV_TAIL_DATA(mp))
+// the tail data should be same as what we stored in metadata, otherwise it's modified out of boundary
 #define IS_TAIL_DATA_INTACT(mp) (BLK_META_PTR(mp)->tail_data == OBSV_TAIL_DATA(mp))
 
 // global variables for stats
