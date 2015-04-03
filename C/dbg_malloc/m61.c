@@ -10,27 +10,27 @@
 
 // global variables for stats
 struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
-
+// list node for storing active blocks
 typedef struct m61_active_block {
     char * mptr;
     struct m61_active_block * prev;
     struct m61_active_block * next;
 }m61_active_block;
-
+// tail of the active block list
 m61_active_block * max_actv_block = NULL;
 
 #define SET_PREV_BLK(blk, p) (blk->prev = p)
 #define GET_PREV_BLK(blk) (blk->prev)
 #define SET_NEXT_BLK(blk, n) (blk->next = n)
 #define GET_NEXT_BLK(blk) (blk->next)
-
+// allocate a new node for active block
 m61_active_block * new_active_block(char * mptr) {
     m61_active_block * new_actv_blk = (m61_active_block *)malloc(ALIGNED_SIZE(sizeof(m61_active_block)));
     new_actv_blk->mptr = mptr;
     SET_PREV_BLK(new_actv_blk, NULL); SET_NEXT_BLK(new_actv_blk, NULL);
     return new_actv_blk;
 }
-
+// link a new mem block into active block list
 bool link_active_block(char * mptr) {
     if (!mptr) return false;
     m61_active_block * new_actv_blk = new_active_block(mptr);
@@ -50,10 +50,10 @@ bool link_active_block(char * mptr) {
     if (!max_actv_block || max_actv_block->mptr < mptr) max_actv_block = new_actv_blk;
     return true;
 }
-
+// unlink a mem block from the active block list
 bool unlink_active_block(char * mptr) {
     if (!mptr) return false;
-    // do a pre check to ensure mptr is indeed an active block
+    // check to ensure mptr is indeed an active block
     m61_active_block * check_blk = max_actv_block;
     while (check_blk) {
         if (check_blk->mptr == mptr) {
@@ -64,6 +64,7 @@ bool unlink_active_block(char * mptr) {
             if (next_blk) SET_PREV_BLK(next_blk, prev_blk);
             if (max_actv_block == check_blk) max_actv_block = prev_blk;
             SET_PREV_BLK(check_blk, NULL); SET_NEXT_BLK(check_blk, NULL);
+            SET_BLOCK_FREE(mptr);
             free(check_blk);
             return true;
         }
@@ -71,7 +72,7 @@ bool unlink_active_block(char * mptr) {
     }
     return false;
 }
-
+// check if a mem block is indeed active
 bool is_block_active(char * mptr) {
     if (!mptr) return false;
 
