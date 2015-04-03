@@ -25,7 +25,6 @@ typedef struct m61_block_meta {
 	size_t block_size; // size requested, not adjusted aligned size
 	char alloced; // flag of alloc/free status
     taildata_type tail_data; // the data beyond the tail as an intact checker, for boundary write error detection
-    char * prev_mptr; // malloced ptr pointing to the previous block
     const char* file;
     int line;
 }m61_blockmeta;
@@ -77,15 +76,13 @@ typedef struct m61_block_meta {
 // the tail data should be same as what we stored in metadata, 
 // otherwise it's modified out of boundary
 #define IS_TAIL_DATA_INTACT(mp) (BLK_META_PTR(mp)->tail_data == OBSV_TAIL_DATA(mp))
-// get the pointer to the previous malloced memory block
-#define GET_PREV_MPTR(mp) (BLK_META_PTR(mp)->prev_mptr)
 // initialize the metadata stored in a block
 #define INIT_BLOCK_META(mp, sz, file, line) {\
-    m61_blockmeta meta = {0, 0, 0, current_blk_mptr, NULL, 0}; \
+    m61_blockmeta meta = {0, 0, 0, NULL, 0}; \
     memcpy(mp, &meta, META_SIZE); \
     SET_BLOCK_SIZE(ptr, sz); SET_BLOCK_ALLOC(ptr); \
     SET_BLOCK_FILE(ptr, file); SET_BLOCK_LINE(ptr, line); \
-    INIT_TAIL_DATA(ptr); current_blk_mptr = mp; }
+    INIT_TAIL_DATA(ptr); }
 
 void m61_getstatistics(struct m61_statistics* stats);
 void m61_printstatistics(void);

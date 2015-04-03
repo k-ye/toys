@@ -10,52 +10,77 @@
 
 // global variables for stats
 struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
-// the latest malloced ptr
-char * current_blk_mptr = NULL;
 
-typedef struct m61_active_node {
-    const char * address;
-    struct m61_active_node * prev;
-    struct m61_active_node * next;
-}m61_active_node;
+typedef struct m61_active_block {
+    char * mptr;
+    struct m61_active_block * prev;
+    struct m61_active_block * next;
+}m61_active_block;
 
-m61_active_node * actv_rootptr = NULL;
+m61_active_block * max_actv_block = NULL;
 
-void add_active_node(const char * addr) {
-    m61_active_node * new_node = (m61_active_node *)malloc(ALIGNED_SIZE(sizeof(m61_active_node)));
-    new_node->address = addr;
-    new_node->prev = NULL; new_node->next = NULL;
+#define SET_PREV_BLK(blk, p) (blk->prev = p)
+#define GET_PREV_BLK(blk) (blk->prev)
+#define SET_NEXT_BLK(blk, n) (blk->next = n)
+#define GET_NEXT_BLK(blk) (blk->next)
 
-    if (actv_rootptr) {
-        actv_rootptr->next = new_node;
-        new_node->prev = actv_rootptr;
-    }
-    actv_rootptr = new_node;
+m61_active_block * new_active_block(char * mptr) {
+    m61_active_block * new_actv_blk = (m61_active_block *)malloc(ALIGNED_SIZE(sizeof(m61_active_block)));
+    new_actv_blk->mptr = mptr;
+    SET_PREV_BLK(new_actv_blk, NULL); SET_NEXT_BLK(new_actv_blk, NULL);
+    return new_actv_blk;
 }
 
-bool remove_active_node(const char * addr) {
-    m61_active_node * nd_ptr = actv_rootptr;
-    while (nd_ptr) {
-        if (nd_ptr->address == addr) {
-            if (nd_ptr->prev) nd_ptr->prev->next = nd_ptr->next;
-            if (nd_ptr->next) nd_ptr->next->prev = nd_ptr->prev;
-            if (nd_ptr == actv_rootptr) actv_rootptr = nd_ptr->prev;
-            nd_ptr->prev = NULL; nd_ptr->next = NULL;
-            free(nd_ptr);
+bool link_active_block(char * mptr) {
+    if (!mptr) return false;
+    m61_active_block * new_actv_blk = new_active_block(mptr);
+
+    if (max_actv_block) {
+        //find the first active mptr that is <= mptr
+        m61_active_block * before_blk = max_actv_block;
+        while (before_blk && (before_blk->mptr > mptr))
+            before_blk = GET_PREV_BLK(before_blk);
+        // set the double linked list
+        SET_PREV_BLK(new_actv_blk, before_blk);
+        if (before_blk) SET_NEXT_BLK(new_actv_blk, GET_NEXT_BLK(before_blk));
+        if (GET_NEXT_BLK(new_actv_blk)) SET_PREV_BLK(GET_NEXT_BLK(new_actv_blk), new_actv_blk);
+        if (before_blk) SET_NEXT_BLK(before_blk, new_actv_blk);
+    }
+    // update the max active mptr
+    if (!max_actv_block || max_actv_block->mptr < mptr) max_actv_block = new_actv_blk;
+    return true;
+}
+
+bool unlink_active_block(char * mptr) {
+    if (!mptr) return false;
+    // do a pre check to ensure mptr is indeed an active block
+    m61_active_block * check_blk = max_actv_block;
+    while (check_blk) {
+        if (check_blk->mptr == mptr) {
+            // do the actual unlink job
+            m61_active_block * prev_blk = GET_PREV_BLK(check_blk);
+            m61_active_block * next_blk = GET_NEXT_BLK(check_blk);
+            if (prev_blk) SET_NEXT_BLK(prev_blk, next_blk);
+            if (next_blk) SET_PREV_BLK(next_blk, prev_blk);
+            if (max_actv_block == check_blk) max_actv_block = prev_blk;
+            SET_PREV_BLK(check_blk, NULL); SET_NEXT_BLK(check_blk, NULL);
+            free(check_blk);
             return true;
         }
-        nd_ptr = nd_ptr->prev;
+        check_blk = GET_PREV_BLK(check_blk);
     }
     return false;
 }
 
-bool is_address_active(const char * addr) {
-    m61_active_node * nd_ptr = actv_rootptr;
-    while (nd_ptr) {
-        if (nd_ptr->address == addr) return true;
-        nd_ptr = nd_ptr->prev;
+bool is_block_active(char * mptr) {
+    if (!mptr) return false;
+
+    m61_active_block * actv_blk = max_actv_block;
+    while (actv_blk) {
+        if (actv_blk->mptr == mptr) return true;
+        actv_blk = GET_PREV_BLK(actv_blk);
     }
-    return false;   
+    return false;
 }
 
 void* m61_malloc(size_t sz, const char* file, int line) {
@@ -77,7 +102,7 @@ void* m61_malloc(size_t sz, const char* file, int line) {
         global_stats.active_size += sz;
         // store the metadata at the beginning
         INIT_BLOCK_META(ptr, sz, file, line);
-        add_active_node(ptr);
+        link_active_block(ptr);
 
         if ((char *)ptr < global_stats.heap_min) global_stats.heap_min = ptr;
         if ((char *)(ptr+asize) > global_stats.heap_max) global_stats.heap_max = (ptr+asize);
@@ -94,26 +119,31 @@ void m61_free(void *ptr, const char *file, int line) {
         if (ptr) {
             if ((char *)ptr > global_stats.heap_max || (char *)ptr < global_stats.heap_min) {
                 printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not in heap\n", file, line, (unsigned int)ptr);
+            } else if (!IS_TAIL_DATA_INTACT(ptr)) {
+                printf("MEMORY BUG: %s:%d: detected wild write during free of pointer 0x%x\n", file, line, (unsigned int)ptr);
+                abort();
             } else {
-                void * check_ptr = current_blk_mptr;
-                while (check_ptr > ptr)
-                    check_ptr = GET_PREV_MPTR(check_ptr);
-                if (check_ptr < ptr) {
-                    size_t ptr_diff = (size_t)(ptr - check_ptr);
-                    size_t actual_sz = GET_BLOCK_SIZE(check_ptr);
-                    int actual_line = GET_BLOCK_LINE(check_ptr);
+                m61_active_block * check_blk = max_actv_block;
+                while (check_blk && check_blk->mptr > (char *)ptr)
+                    check_blk = GET_PREV_BLK(check_blk);
+
+                size_t ptr_diff = check_blk ? (size_t)((char *)ptr - check_blk->mptr) : 0;
+                size_t actual_sz = check_blk ? GET_BLOCK_SIZE(check_blk->mptr) : 0;
+
+                if (check_blk && (check_blk->mptr < (char *)ptr) && (ptr_diff < actual_sz)) {
+                    int actual_line = GET_BLOCK_LINE(check_blk->mptr);
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not allocated\n", file, line, (unsigned int)ptr);
                     printf("  %s:%d: 0x%x is %zu bytes inside a %zu byte region allocated here\n", 
                         file, actual_line, (unsigned int)ptr, ptr_diff, actual_sz);
-                } else if (!IS_TAIL_DATA_INTACT(ptr)) {
-                    printf("MEMORY BUG: %s:%d: detected wild write during free of pointer 0x%x\n", file, line, (unsigned int)ptr);
-                } else if (!IS_BLOCK_ALLOC(ptr) || !is_address_active(ptr)) {
+                    abort();
+                } else if (!IS_BLOCK_ALLOC(ptr) || !is_block_active(ptr)) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
+                    abort();
                 } else {
                     global_stats.nactive--;
                     global_stats.active_size -= GET_BLOCK_SIZE(ptr);
                     SET_BLOCK_FREE(ptr);
-                    remove_active_node(ptr);
+                    unlink_active_block(ptr);
                     free(ptr);
                 }
             }
@@ -165,11 +195,11 @@ void m61_printstatistics(void) {
 
 void m61_printleakreport(void) {
     // Your code here.
-    m61_active_node * nd_ptr = actv_rootptr;
-    while (nd_ptr) {
-        const char * mptr = nd_ptr->address;
+    m61_active_block * actv_blk = max_actv_block;
+    while (actv_blk) {
+        char * mptr = actv_blk->mptr;
         printf("LEAK CHECK: %s:%d: allocated object 0x%x with size %zu\n", 
                 GET_BLOCK_FILE(mptr), GET_BLOCK_LINE(mptr), (unsigned int)DATA_PTR(mptr), GET_BLOCK_SIZE(mptr));
-        nd_ptr = nd_ptr->prev;
+        actv_blk = GET_PREV_BLK(actv_blk);
     }
 }
