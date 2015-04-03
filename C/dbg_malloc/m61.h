@@ -52,11 +52,11 @@ typedef struct m61_block_meta {
 // get the malloced block size stored in m61_blockmeta struct from malloced ptr (NOT data ptr)
 #define GET_BLOCK_SIZE(mp) (BLK_META_PTR(mp)->block_size)
 // flag the block as allocated
-#define SET_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced = 1)
+#define SET_BLOCK_ALLOC(mp) ((BLK_META_PTR(mp)->alloced) = 1)
 // flag the block as freed
-#define SET_BLOCK_FREE(mp) (BLK_META_PTR(mp)->alloced = 0)
+#define SET_BLOCK_FREE(mp) ((BLK_META_PTR(mp)->alloced) = 0)
 // check if the block is being freed
-#define IS_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced == 1)
+#define IS_BLOCK_ALLOC(mp) ((BLK_META_PTR(mp)->alloced) == 1)
 // set the file that created this mem block
 #define SET_BLOCK_FILE(mp, file) (BLK_META_PTR(mp)->file = file)
 // read the file that created this mem block

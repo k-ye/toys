@@ -6,11 +6,57 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 // global variables for stats
 struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
 // the latest malloced ptr
 char * current_blk_mptr = NULL;
+
+typedef struct m61_active_node {
+    const char * address;
+    struct m61_active_node * prev;
+    struct m61_active_node * next;
+}m61_active_node;
+
+m61_active_node * actv_rootptr = NULL;
+
+void add_active_node(const char * addr) {
+    m61_active_node * new_node = (m61_active_node *)malloc(ALIGNED_SIZE(sizeof(m61_active_node)));
+    new_node->address = addr;
+    new_node->prev = NULL; new_node->next = NULL;
+
+    if (actv_rootptr) {
+        actv_rootptr->next = new_node;
+        new_node->prev = actv_rootptr;
+    }
+    actv_rootptr = new_node;
+}
+
+bool remove_active_node(const char * addr) {
+    m61_active_node * nd_ptr = actv_rootptr;
+    while (nd_ptr) {
+        if (nd_ptr->address == addr) {
+            if (nd_ptr->prev) nd_ptr->prev->next = nd_ptr->next;
+            if (nd_ptr->next) nd_ptr->next->prev = nd_ptr->prev;
+            if (nd_ptr == actv_rootptr) actv_rootptr = nd_ptr->prev;
+            nd_ptr->prev = NULL; nd_ptr->next = NULL;
+            free(nd_ptr);
+            return true;
+        }
+        nd_ptr = nd_ptr->prev;
+    }
+    return false;
+}
+
+bool is_address_active(const char * addr) {
+    m61_active_node * nd_ptr = actv_rootptr;
+    while (nd_ptr) {
+        if (nd_ptr->address == addr) return true;
+        nd_ptr = nd_ptr->prev;
+    }
+    return false;   
+}
 
 void* m61_malloc(size_t sz, const char* file, int line) {
     (void) file, (void) line;   // avoid uninitialized variable warnings
@@ -31,6 +77,7 @@ void* m61_malloc(size_t sz, const char* file, int line) {
         global_stats.active_size += sz;
         // store the metadata at the beginning
         INIT_BLOCK_META(ptr, sz, file, line);
+        add_active_node(ptr);
 
         if ((char *)ptr < global_stats.heap_min) global_stats.heap_min = ptr;
         if ((char *)(ptr+asize) > global_stats.heap_max) global_stats.heap_max = (ptr+asize);
@@ -48,16 +95,25 @@ void m61_free(void *ptr, const char *file, int line) {
             if ((char *)ptr > global_stats.heap_max || (char *)ptr < global_stats.heap_min) {
                 printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not in heap\n", file, line, (unsigned int)ptr);
             } else {
-                if (!IS_ALIGNED((unsigned int)ptr)) {
+                void * check_ptr = current_blk_mptr;
+                while (check_ptr > ptr)
+                    check_ptr = GET_PREV_MPTR(check_ptr);
+                if (check_ptr < ptr) {
+                    size_t ptr_diff = (size_t)(ptr - check_ptr);
+                    size_t actual_sz = GET_BLOCK_SIZE(check_ptr);
+                    int actual_line = GET_BLOCK_LINE(check_ptr);
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not allocated\n", file, line, (unsigned int)ptr);
-                } else if (!IS_BLOCK_ALLOC(ptr)) {
-                    printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
+                    printf("  %s:%d: 0x%x is %zu bytes inside a %zu byte region allocated here\n", 
+                        file, actual_line, (unsigned int)ptr, ptr_diff, actual_sz);
                 } else if (!IS_TAIL_DATA_INTACT(ptr)) {
                     printf("MEMORY BUG: %s:%d: detected wild write during free of pointer 0x%x\n", file, line, (unsigned int)ptr);
+                } else if (!IS_BLOCK_ALLOC(ptr) || !is_address_active(ptr)) {
+                    printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
                 } else {
                     global_stats.nactive--;
                     global_stats.active_size -= GET_BLOCK_SIZE(ptr);
                     SET_BLOCK_FREE(ptr);
+                    remove_active_node(ptr);
                     free(ptr);
                 }
             }
@@ -109,11 +165,11 @@ void m61_printstatistics(void) {
 
 void m61_printleakreport(void) {
     // Your code here.
-    char * mptr = current_blk_mptr;
-    while (mptr) {
-        if (IS_BLOCK_ALLOC(mptr))
-            printf("LEAK CHECK: %s:%d: allocated object 0x%x with size %zu\n", 
+    m61_active_node * nd_ptr = actv_rootptr;
+    while (nd_ptr) {
+        const char * mptr = nd_ptr->address;
+        printf("LEAK CHECK: %s:%d: allocated object 0x%x with size %zu\n", 
                 GET_BLOCK_FILE(mptr), GET_BLOCK_LINE(mptr), (unsigned int)DATA_PTR(mptr), GET_BLOCK_SIZE(mptr));
-        mptr = GET_PREV_MPTR(mptr);
+        nd_ptr = nd_ptr->prev;
     }
 }
