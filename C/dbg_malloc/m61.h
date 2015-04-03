@@ -23,6 +23,9 @@ typedef struct m61_block_meta {
 		size_t block_size; // size requested, not adjusted aligned size
 		char alloced; // flag of alloc/free status
         taildata_type tail_data; // the data beyond the tail as an intact checker, for boundary write error detection
+        char * prev_mptr; // malloced ptr pointing to the previous block
+        const char* file;
+        int line;
 }m61_blockmeta;
 
 void m61_getstatistics(struct m61_statistics* stats);

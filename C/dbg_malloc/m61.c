@@ -5,6 +5,12 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <time.h>
+#include <stdlib.h>
+
+// global variables for stats
+struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
+char * current_blk_mptr = NULL;
 
 #define DSIZE 8
 // check if an address is DSIZE aligned
@@ -13,14 +19,17 @@
 #define ALIGNED_SIZE(sz) (IS_ALIGNED(sz) ? sz : ((sz + DSIZE - 1) / DSIZE) * DSIZE)
 // aligned block metadata size has to be aligned so that data address is correctly aligned
 #define META_SIZE (ALIGNED_SIZE(sizeof(m61_blockmeta)))
-// aligned tail data size
-#define TAIL_SIZE (ALIGNED_SIZE(sizeof(taildata_type)))
+// tail data size, do not need to be aligned, this will append immediately after the last byte of the data
+#define TAIL_SIZE (sizeof(taildata_type))
 // convert from the malloced ptr to the data ptr
 #define DATA_PTR(mp) (mp + META_SIZE)
 // convert from the data ptr to actual malloced ptr
 #define MALLOC_PTR(dp) (dp - META_SIZE)
 // initialize the metadata stored in a block
-#define INIT_BLOCK_META(mp) { m61_blockmeta meta = {0, 0, 0}; memcpy(mp, &meta, META_SIZE); }
+#define INIT_BLOCK_META(mp) {\
+    m61_blockmeta meta = {0, 0, 0, current_blk_mptr, NULL, 0}; \
+    memcpy(mp, &meta, META_SIZE); \
+    current_blk_mptr = mp; }
 // return the metadata pointer of a given block, using malloced ptr (NOT data ptr)
 #define BLK_META_PTR(mp) ((m61_blockmeta *)(mp))
 // set the block size meta information
@@ -34,23 +43,33 @@
 // check if the block is being freed
 #define IS_BLOCK_ALLOC(mp) (BLK_META_PTR(mp)->alloced == 1)
 
+#define GET_PREV_MPTR(mp) (BLK_META_PTR(mp)->prev_mptr)
+
+#define SET_BLOCK_FILE(mp, file) (BLK_META_PTR(mp)->file = file)
+
+#define GET_BLOCK_FILE(mp) (BLK_META_PTR(mp)->file)
+
+#define SET_BLOCK_LINE(mp, line) (BLK_META_PTR(mp)->line = line)
+
+#define GET_BLOCK_LINE(mp) (BLK_META_PTR(mp)->line)
+
 #define TAIL_DATA_PTR(mp) ((taildata_type *)(mp + META_SIZE + GET_BLOCK_SIZE(mp)))
 // peek the current data stored in tail
 #define OBSV_TAIL_DATA(mp) (*TAIL_DATA_PTR(mp))
 // initialize the tail data
-#define INIT_TAIL_DATA(mp) {*TAIL_DATA_PTR(mp) = 0xfb02; BLK_META_PTR(mp)->tail_data = OBSV_TAIL_DATA(mp);}// printf("%lu\n", BLK_META_PTR(mp)->tail_data);}
+#define INIT_TAIL_DATA(mp) {\
+    srand(time(NULL)); \
+    *TAIL_DATA_PTR(mp) = rand(); \
+    BLK_META_PTR(mp)->tail_data = OBSV_TAIL_DATA(mp); }
 // the tail data should be same as what we stored in metadata, otherwise it's modified out of boundary
 #define IS_TAIL_DATA_INTACT(mp) (BLK_META_PTR(mp)->tail_data == OBSV_TAIL_DATA(mp))
-
-// global variables for stats
-struct m61_statistics global_stats = {0, 0, 0, 0, 0, 0, (char *)ULONG_MAX, 0};
 
 void* m61_malloc(size_t sz, const char* file, int line) {
     (void) file, (void) line;   // avoid uninitialized variable warnings
     // Your code here.
     if (sz == 0) return NULL;
     // adjusted size for 8 byte alignment
-    size_t asize = ALIGNED_SIZE(sz) + META_SIZE + TAIL_SIZE;
+    size_t asize = META_SIZE + ALIGNED_SIZE(sz + TAIL_SIZE);
     // asize < sz means sz is too large that asize overflows
     void* ptr = (asize < sz) ? NULL : malloc(asize);
     if (ptr == NULL) {
@@ -66,6 +85,8 @@ void* m61_malloc(size_t sz, const char* file, int line) {
         INIT_BLOCK_META(ptr);
         SET_BLOCK_SIZE(ptr, sz);
         SET_BLOCK_ALLOC(ptr);
+        SET_BLOCK_FILE(ptr, file);
+        SET_BLOCK_LINE(ptr, line);
         INIT_TAIL_DATA(ptr);
 
         if ((char *)ptr < global_stats.heap_min) global_stats.heap_min = ptr;
@@ -145,4 +166,11 @@ void m61_printstatistics(void) {
 
 void m61_printleakreport(void) {
     // Your code here.
+    char * mptr = current_blk_mptr;
+    while (mptr) {
+        if (IS_BLOCK_ALLOC(mptr))
+            printf("LEAK CHECK: %s:%d: allocated object 0x%x with size %zu\n", 
+                GET_BLOCK_FILE(mptr), GET_BLOCK_LINE(mptr), (unsigned int)DATA_PTR(mptr), GET_BLOCK_SIZE(mptr));
+        mptr = GET_PREV_MPTR(mptr);
+    }
 }
