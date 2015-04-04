@@ -23,7 +23,6 @@ typedef unsigned long taildata_type;
 
 typedef struct m61_block_meta {
 	size_t block_size; // size requested, not adjusted aligned size
-	char alloced; // flag of alloc/free status
     taildata_type tail_data; // the data beyond the tail as an intact checker, for boundary write error detection
     const char* file;
     int line;
@@ -50,12 +49,6 @@ typedef struct m61_block_meta {
 #define SET_BLOCK_SIZE(mp, sz) (BLK_META_PTR(mp)->block_size = sz)
 // get the malloced block size stored in m61_blockmeta struct from malloced ptr (NOT data ptr)
 #define GET_BLOCK_SIZE(mp) (BLK_META_PTR(mp)->block_size)
-// flag the block as allocated
-#define SET_BLOCK_ALLOC(mp) ((BLK_META_PTR(mp)->alloced) = 1)
-// flag the block as freed
-#define SET_BLOCK_FREE(mp) ((BLK_META_PTR(mp)->alloced) = 0)
-// check if the block is being freed
-#define IS_BLOCK_ALLOC(mp) ((BLK_META_PTR(mp)->alloced) == 1)
 // set the file that created this mem block
 #define SET_BLOCK_FILE(mp, file) (BLK_META_PTR(mp)->file = file)
 // read the file that created this mem block
@@ -78,11 +71,9 @@ typedef struct m61_block_meta {
 #define IS_TAIL_DATA_INTACT(mp) (BLK_META_PTR(mp)->tail_data == OBSV_TAIL_DATA(mp))
 // initialize the metadata stored in a block
 #define INIT_BLOCK_META(mp, sz, file, line) {\
-    m61_blockmeta meta = {0, 0, 0, NULL, 0}; \
-    memcpy(mp, &meta, META_SIZE); \
-    SET_BLOCK_SIZE(ptr, sz); SET_BLOCK_ALLOC(ptr); \
-    SET_BLOCK_FILE(ptr, file); SET_BLOCK_LINE(ptr, line); \
-    INIT_TAIL_DATA(ptr); }
+    m61_blockmeta meta = {0, 0, NULL, 0}; memcpy(mp, &meta, META_SIZE); \
+    SET_BLOCK_SIZE(ptr, sz); INIT_TAIL_DATA(ptr); \
+    SET_BLOCK_FILE(ptr, file); SET_BLOCK_LINE(ptr, line); }
 
 void m61_getstatistics(struct m61_statistics* stats);
 void m61_printstatistics(void);

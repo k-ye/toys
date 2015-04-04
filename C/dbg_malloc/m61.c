@@ -18,10 +18,13 @@ typedef struct m61_active_block {
 }m61_active_block;
 // tail of the active block list
 m61_active_block * max_actv_block = NULL;
-
+// set the previous block ptr of the given block
 #define SET_PREV_BLK(blk, p) (blk->prev = p)
+// get the previous block ptr of the given block
 #define GET_PREV_BLK(blk) (blk->prev)
+// set the next block ptr of the given block
 #define SET_NEXT_BLK(blk, n) (blk->next = n)
+// get the next block ptr of the given block
 #define GET_NEXT_BLK(blk) (blk->next)
 // allocate a new node for active block
 m61_active_block * new_active_block(char * mptr) {
@@ -64,7 +67,6 @@ bool unlink_active_block(char * mptr) {
             if (next_blk) SET_PREV_BLK(next_blk, prev_blk);
             if (max_actv_block == check_blk) max_actv_block = prev_blk;
             SET_PREV_BLK(check_blk, NULL); SET_NEXT_BLK(check_blk, NULL);
-            SET_BLOCK_FREE(mptr);
             free(check_blk);
             return true;
         }
@@ -137,13 +139,12 @@ void m61_free(void *ptr, const char *file, int line) {
                     printf("  %s:%d: 0x%x is %zu bytes inside a %zu byte region allocated here\n", 
                         file, actual_line, (unsigned int)ptr, ptr_diff, actual_sz);
                     abort();
-                } else if (!IS_BLOCK_ALLOC(ptr) || !is_block_active(ptr)) {
+                } else if (!is_block_active(ptr)) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
                     abort();
                 } else {
                     global_stats.nactive--;
                     global_stats.active_size -= GET_BLOCK_SIZE(ptr);
-                    SET_BLOCK_FREE(ptr);
                     unlink_active_block(ptr);
                     free(ptr);
                 }
