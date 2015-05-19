@@ -18,7 +18,6 @@ int main(int argc, char** argv) {
     io61_profile_begin();
     io61_file* inf = io61_open_check(in_filename, O_RDONLY);
     io61_file* outf = io61_fdopen(STDOUT_FILENO, O_WRONLY);
-
     while (inf_size > 0) {
         int ch = io61_readc(inf);
         if (ch == EOF)

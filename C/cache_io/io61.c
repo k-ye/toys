@@ -43,16 +43,20 @@ int io61_close(io61_file* f) {
 }
 
 
+size_t io61_readn(io61_file* f, char* buf, size_t sz) {
+    size_t result = read(f->fd, buf, sz);
+    if (result == sz) return result;
+    else return EOF;
+}
+
 // io61_readc(f)
 //    Read a single (unsigned) character from `f` and return it. Returns EOF
 //    (which is -1) on error or end-of-file.
 
 int io61_readc(io61_file* f) {
     unsigned char buf[1];
-    if (read(f->fd, buf, 1) == 1)
-        return buf[0];
-    else
-        return EOF;
+    if (io61_readn(f, buf, 1) == 1) return buf[0];
+    else return EOF;
 }
 
 
@@ -63,18 +67,17 @@ int io61_readc(io61_file* f) {
 //    -1 an error occurred before any characters were read.
 
 ssize_t io61_read(io61_file* f, char* buf, size_t sz) {
-    size_t nread = 0;
-    while (nread != sz) {
-        int ch = io61_readc(f);
-        if (ch == EOF)
-            break;
-        buf[nread] = ch;
-        ++nread;
-    }
-    if (nread != 0 || sz == 0 || io61_eof(f))
+    size_t nread = io61_readn(f, buf, sz);
+    if (nread == sz || sz == 0 || io61_eof(f))
         return nread;
     else
         return -1;
+}
+
+ssize_t io61_writen(io61_file* f, const unsigned char* buf, size_t sz) {
+    size_t result = write(f->fd, buf, sz);
+    if (result == sz) return result;
+    else return -1;
 }
 
 
@@ -85,10 +88,9 @@ ssize_t io61_read(io61_file* f, char* buf, size_t sz) {
 int io61_writec(io61_file* f, int ch) {
     unsigned char buf[1];
     buf[0] = ch;
-    if (write(f->fd, buf, 1) == 1)
-        return 0;
-    else
-        return -1;
+    if (io61_writen(f
+        , buf, 1) == 1) return 1;
+    else return -1;
 }
 
 
@@ -98,13 +100,8 @@ int io61_writec(io61_file* f, int ch) {
 //    an error occurred before any characters were written.
 
 ssize_t io61_write(io61_file* f, const char* buf, size_t sz) {
-    size_t nwritten = 0;
-    while (nwritten != sz) {
-        if (io61_writec(f, buf[nwritten]) == -1)
-            break;
-        ++nwritten;
-    }
-    if (nwritten != 0 || sz == 0)
+    ssize_t nwritten = io61_writen(f, buf, sz);
+    if (nwritten == sz || sz == 0)
         return nwritten;
     else
         return -1;
