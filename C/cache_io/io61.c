@@ -6,7 +6,12 @@
 
 // io61.c
 //    YOUR CODE HERE!
+#define BUFSIZE 32768
+#define MIN(a,b) ((a) < (b) ? a : b)
 
+unsigned char g_rbuffer[BUFSIZE];   // global reading buffer
+ssize_t g_rbuf_next = 0;                // next index in read buffer
+ssize_t g_rbuf_real_size = -1;           // the actual read buffer size, could be leq than BUFSIZE near EOF
 
 // io61_file
 //    Data structure for io61 file wrappers. Add your own stuff.
@@ -44,9 +49,38 @@ int io61_close(io61_file* f) {
 
 
 size_t io61_readn(io61_file* f, char* buf, size_t sz) {
+    /* ver. 1, no cache
     size_t result = read(f->fd, buf, sz);
     if (result == sz) return result;
-    else return EOF;
+    else return EOF;*/
+
+    /* ver. 2, single slot cache */
+    ssize_t has_read = 0;
+    // this checks the initial condition where @g_rbuf_real_size is equal to -1
+    if (g_rbuf_real_size >= 0) {
+        // read all that nees to be read from cached buffer
+        size_t buf_rsz = MIN(sz, g_rbuf_real_size - g_rbuf_next);
+        memcpy(buf, g_rbuffer + g_rbuf_next, buf_rsz);
+        has_read += buf_rsz;
+        g_rbuf_next += has_read;
+    }
+
+    if (has_read < sz) {
+        // read all the rest that needs to be read via IO
+        size_t need_io_rsz = sz - has_read;
+        ssize_t io_rres = read(f->fd, buf + has_read, need_io_rsz);
+        if (io_rres != need_io_rsz) return EOF;
+        has_read += need_io_rsz;
+        // if this branch can be reached, that means our buffer has been read completely,
+        // we need to fill in more into the cache buffer
+        io_rres = read(f->fd, g_rbuffer, BUFSIZE);
+        if (io_rres < 0) return EOF;
+        else {
+            g_rbuf_next = 0;
+            g_rbuf_real_size = io_rres;
+        }
+    }
+    return has_read;
 }
 
 // io61_readc(f)
