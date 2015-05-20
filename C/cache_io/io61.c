@@ -11,17 +11,16 @@
 #define W_BUFSIZE BUFSIZE
 #define MIN(a,b) ((a) < (b) ? a : b)
 
-/* TODO: Series mistake currently. Put all this into io61_file struct!!! */
-unsigned char g_rbuffer[R_BUFSIZE];     // global single-slot reading buffer
-ssize_t g_rbuf_next = 0;                // next index in read buffer
-ssize_t g_rbuf_real_size = -1;          // the actual read buffer size, could be leq than BUFSIZE near EOF
-unsigned char g_wbuffer[W_BUFSIZE];     // global single-slot writing buffer
-ssize_t g_wbuf_cur_size = 0;            // current write buffer size
 // io61_file
 //    Data structure for io61 file wrappers. Add your own stuff.
 
 struct io61_file {
-    int fd;
+    int fd;                                 // file descriptor
+    unsigned char g_rbuffer[R_BUFSIZE];     // global single-slot reading buffer
+    ssize_t g_rbuf_next;                    // next index in read buffer
+    ssize_t g_rbuf_real_size;               // the actual read buffer size, could be leq than BUFSIZE near EOF
+    unsigned char g_wbuffer[W_BUFSIZE];     // global single-slot writing buffer
+    ssize_t g_wbuf_cur_size;                // current write buffer size
 };
 
 
@@ -35,6 +34,9 @@ io61_file* io61_fdopen(int fd, int mode) {
     assert(fd >= 0);
     io61_file* f = (io61_file*) malloc(sizeof(io61_file));
     f->fd = fd;
+    f->g_rbuf_next = 0;
+    f->g_rbuf_real_size = -1;
+    f->g_wbuf_cur_size = 0;
     (void) mode;
     return f;
 }
@@ -61,12 +63,12 @@ size_t io61_readn(io61_file* f, char* buf, size_t sz) {
     /* ver. 2, single slot reading cache */
     ssize_t has_read = 0;
     // this checks the initial condition where @g_rbuf_real_size is equal to -1
-    if (g_rbuf_real_size >= 0) {
+    if (f->g_rbuf_real_size >= 0) {
         // read all that nees to be read from cached buffer
-        size_t buf_rsz = MIN(sz, g_rbuf_real_size - g_rbuf_next);
-        memcpy(buf, g_rbuffer + g_rbuf_next, buf_rsz);
+        size_t buf_rsz = MIN(sz, f->g_rbuf_real_size - f->g_rbuf_next);
+        memcpy(buf, f->g_rbuffer + f->g_rbuf_next, buf_rsz);
         has_read += buf_rsz;
-        g_rbuf_next += has_read;
+        f->g_rbuf_next += has_read;
     }
 
     if (has_read < sz) {
@@ -77,11 +79,11 @@ size_t io61_readn(io61_file* f, char* buf, size_t sz) {
         has_read += io_rres;
         // if this branch can be reached, that means our buffer has been read completely,
         // we need to fill in more into the cache buffer
-        io_rres = read(f->fd, g_rbuffer, BUFSIZE);
+        io_rres = read(f->fd, f->g_rbuffer, BUFSIZE);
         if (io_rres < 0) return EOF;
         else {
-            g_rbuf_next = 0;
-            g_rbuf_real_size = io_rres;
+            f->g_rbuf_next = 0;
+            f->g_rbuf_real_size = io_rres;
         }
     }
     return has_read;
@@ -113,9 +115,9 @@ ssize_t io61_read(io61_file* f, char* buf, size_t sz) {
 }
 
 ssize_t io61_flush_wbuf(io61_file* f) {
-    if (g_wbuf_cur_size > 0) {
-        ssize_t wres = write(f->fd, g_wbuffer, g_wbuf_cur_size);
-        g_wbuf_cur_size = 0;
+    if (f->g_wbuf_cur_size > 0) {
+        ssize_t wres = write(f->fd, f->g_wbuffer, f->g_wbuf_cur_size);
+        f->g_wbuf_cur_size = 0;
         return wres;
     }
     return 0;
@@ -129,12 +131,12 @@ ssize_t io61_writen(io61_file* f, const unsigned char* buf, size_t sz) {
 
     /* ver. 2, single slot writing cache */
     ssize_t has_written = 0;
-    size_t buf_wsz = MIN(sz, W_BUFSIZE - g_wbuf_cur_size);
-    memcpy(g_wbuffer + g_wbuf_cur_size, buf, buf_wsz);
+    size_t buf_wsz = MIN(sz, W_BUFSIZE - f->g_wbuf_cur_size);
+    memcpy(f->g_wbuffer + f->g_wbuf_cur_size, buf, buf_wsz);
     has_written += buf_wsz;
-    g_wbuf_cur_size += has_written;
+    f->g_wbuf_cur_size += has_written;
 
-    if (g_wbuf_cur_size == W_BUFSIZE) {
+    if (f->g_wbuf_cur_size == W_BUFSIZE) {
         ssize_t io_wres = io61_flush_wbuf(f);
         if (io_wres < 0) return io_wres;
     }
