@@ -59,10 +59,12 @@ int io61_readc(io61_file* f) {
 
 ssize_t io61_read(io61_file* f, char* buf, size_t sz) {
     size_t n = fread(buf, 1, sz, f->f);
-    if (n != 0 || sz == 0 || !ferror(f->f))
+    if (n)
         return (ssize_t) n;
+    else if (feof(f->f))
+        return 0;
     else
-        return (ssize_t) -1;
+        return ferror(f->f);
 }
 
 
@@ -81,11 +83,13 @@ int io61_writec(io61_file* f, int ch) {
 //    an error occurred before any characters were written.
 
 ssize_t io61_write(io61_file* f, const char* buf, size_t sz) {
-    size_t n = fwrite(buf, 1, sz, f->f);
-    if (n != 0 || sz == 0 || !ferror(f->f))
+     size_t n = fwrite(buf, 1, sz, f->f);
+    if (n)
         return (ssize_t) n;
+    else if (feof(f->f))
+        return 0;
     else
-        return (ssize_t) -1;
+        return ferror(f->f);
 }
 
 
