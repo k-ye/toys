@@ -208,33 +208,34 @@ int io61_seek(io61_file* f, off_t pos) {
         return -1;*/
 
     /* ver. 2, optimized for reverse reading cases*/
-    size_t pos_delta = f->cur_file_pos - pos;
-    if ((pos <= f->cur_file_pos) && (pos_delta <= f->rbuf_next)) {
-        //printf("cur file pos: %d, seek pos: %d, ", f->cur_file_pos, pos);
-        //printf("pos delta: %d, read next: %d\n", pos_delta, f->rbuf_next);
-        f->rbuf_next -= pos_delta;
-        f->cur_file_pos = pos;
-        if (pos_delta <= f->wbuf_cur_size)
-            f->wbuf_cur_size -= pos_delta;
+    if (f->rbuf_real_size >= 0) {
+        size_t pos_delta = f->cur_file_pos - pos;
+        if ((pos <= f->cur_file_pos) && (pos_delta <= f->rbuf_next)) {
+            //printf("cur file pos: %d, seek pos: %d, ", f->cur_file_pos, pos);
+            //printf("pos delta: %d, read next: %d\n", pos_delta, f->rbuf_next);
+            f->rbuf_next -= pos_delta;
+        }
+        else {
+            size_t real_seek_pos = MAX(((ssize_t)pos + 1 - (ssize_t)R_BUFSIZE), 0);
+            size_t cached_sz = pos - real_seek_pos + 1;
+            off_t r = lseek(f->fd, real_seek_pos, SEEK_SET);
+            if (r != (off_t) real_seek_pos) return -1;
+            
+            ssize_t io_rres = read(f->fd, f->rbuffer, cached_sz);
+
+            if (io_rres < 0)  return -1;
+            f->rbuf_real_size = cached_sz;
+            f->rbuf_next = f->rbuf_real_size - 1;
+        }
     }
     else {
         io61_flush_wbuf(f);
-        
-        size_t real_seek_pos = MAX(((ssize_t)pos + 1 - (ssize_t)R_BUFSIZE), 0);
-        size_t cached_sz = pos - real_seek_pos + 1;
-        off_t r = lseek(f->fd, real_seek_pos, SEEK_SET);
-        if (r != (off_t) real_seek_pos) return -1;
-        
-        ssize_t io_rres = read(f->fd, f->rbuffer, cached_sz);
-        //r = lseek(f->fd, real_seek_pos, SEEK_SET); // after reading, the file position will be advanced again!
-        //if (r != (off_t) real_seek_pos) return -1;
-
-        if (io_rres < 0)  return -1;
-        f->cur_file_pos = pos;
+        off_t r = lseek(f->fd, pos, SEEK_SET);
+        if (r != (off_t) pos) return -1;
         f->wbuf_cur_size = 0;
-        f->rbuf_real_size = cached_sz;
-        f->rbuf_next = f->rbuf_real_size - 1;
     }
+
+    f->cur_file_pos = pos;
     return 0;
 }
 
