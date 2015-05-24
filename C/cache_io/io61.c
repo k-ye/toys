@@ -218,7 +218,7 @@ int io61_seek(io61_file* f, off_t pos) {
             f->wbuf_cur_size -= pos_delta;
     }
     else {
-        io61_flush_wbuf();
+        io61_flush_wbuf(f);
         
         size_t real_seek_pos = MAX(((ssize_t)pos + 1 - (ssize_t)R_BUFSIZE), 0);
         size_t cached_sz = pos - real_seek_pos + 1;
@@ -226,8 +226,8 @@ int io61_seek(io61_file* f, off_t pos) {
         if (r != (off_t) real_seek_pos) return -1;
         
         ssize_t io_rres = read(f->fd, f->rbuffer, cached_sz);
-        r = lseek(f->fd, real_seek_pos, SEEK_SET); // after reading, the file position will be advanced again!
-        if (r != (off_t) real_seek_pos) return -1;
+        //r = lseek(f->fd, real_seek_pos, SEEK_SET); // after reading, the file position will be advanced again!
+        //if (r != (off_t) real_seek_pos) return -1;
 
         if (io_rres < 0)  return -1;
         f->cur_file_pos = pos;
