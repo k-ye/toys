@@ -214,8 +214,12 @@ int io61_seek(io61_file* f, off_t pos) {
         //printf("pos delta: %d, read next: %d\n", pos_delta, f->rbuf_next);
         f->rbuf_next -= pos_delta;
         f->cur_file_pos = pos;
+        if (pos_delta <= f->wbuf_cur_size)
+            f->wbuf_cur_size -= pos_delta;
     }
     else {
+        io61_flush_wbuf();
+        
         size_t real_seek_pos = MAX(((ssize_t)pos + 1 - (ssize_t)R_BUFSIZE), 0);
         size_t cached_sz = pos - real_seek_pos + 1;
         off_t r = lseek(f->fd, real_seek_pos, SEEK_SET);
@@ -227,6 +231,7 @@ int io61_seek(io61_file* f, off_t pos) {
 
         if (io_rres < 0)  return -1;
         f->cur_file_pos = pos;
+        f->wbuf_cur_size = 0;
         f->rbuf_real_size = cached_sz;
         f->rbuf_next = f->rbuf_real_size - 1;
     }
