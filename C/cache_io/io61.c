@@ -229,7 +229,7 @@ int io61_seek(io61_file* f, off_t pos) {
 
             if (io_rres < 0)  return -1;
             f->rbuf_real_size = io_rres;
-            f->rbuf_next = f->rbuf_real_size - 1;
+            f->rbuf_next = pos - real_seek_pos;
         }
     }
     else {
