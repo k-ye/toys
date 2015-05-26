@@ -123,6 +123,7 @@ ssize_t io61_flush_wbuf(io61_file* f) {
     if (f->wbuf_cur_size > 0) {
         ssize_t wres = write(f->fd, f->wbuffer, f->wbuf_cur_size);
         f->wbuf_cur_size = 0;
+        memset(f->wbuffer, 0, W_BUFSIZE);
         return wres;
     }
     return 0;
@@ -208,31 +209,39 @@ int io61_seek(io61_file* f, off_t pos) {
         return -1;*/
 
     /* ver. 2, optimized for reverse reading cases*/
-    if (f->rbuf_real_size >= 0) {
-        size_t pos_delta = f->cur_file_pos - pos;
-        if ((pos <= f->cur_file_pos) && (pos_delta <= f->rbuf_next)) {
+    ssize_t pos_delta = pos - f->cur_file_pos;
+    if (f->rbuf_real_size >= 0) {    
+        /*if ((pos <= f->cur_file_pos) && (pos_delta <= f->rbuf_next)) {
             //printf("cur file pos: %d, seek pos: %d, ", f->cur_file_pos, pos);
             //printf("pos delta: %d, read next: %d\n", pos_delta, f->rbuf_next);
             f->rbuf_next -= pos_delta;
+        }*/
+        if ((f->rbuf_next + pos_delta >= 0) && (f->rbuf_next + pos_delta < f->rbuf_real_size)) {
+            f->rbuf_next += pos_delta;
         }
         else {
-            size_t real_seek_pos = MAX(((ssize_t)pos + 1 - (ssize_t)R_BUFSIZE), 0);
-            size_t cached_sz = pos - real_seek_pos + 1;
+            size_t real_seek_pos = MAX(((ssize_t)pos + 1 - ((ssize_t)R_BUFSIZE >> 1)), 0);
+            size_t cached_sz = R_BUFSIZE;
             off_t r = lseek(f->fd, real_seek_pos, SEEK_SET);
             if (r != (off_t) real_seek_pos) return -1;
             
             ssize_t io_rres = read(f->fd, f->rbuffer, cached_sz);
 
             if (io_rres < 0)  return -1;
-            f->rbuf_real_size = cached_sz;
+            f->rbuf_real_size = io_rres;
             f->rbuf_next = f->rbuf_real_size - 1;
         }
     }
     else {
-        io61_flush_wbuf(f);
-        off_t r = lseek(f->fd, pos, SEEK_SET);
-        if (r != (off_t) pos) return -1;
-        f->wbuf_cur_size = 0;
+        if ((f->cur_file_pos <= pos) && (pos_delta + f->wbuf_cur_size <= W_BUFSIZE)) {
+            f->wbuf_cur_size += pos_delta;
+        }
+        else {
+            io61_flush_wbuf(f);
+            off_t r = lseek(f->fd, pos, SEEK_SET);
+            if (r != (off_t) pos) return -1;
+            f->wbuf_cur_size = 0;
+        }
     }
 
     f->cur_file_pos = pos;
