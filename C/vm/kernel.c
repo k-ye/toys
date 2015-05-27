@@ -102,11 +102,12 @@ void kernel(const char* command) {
             process_setup(i, i - 1);
 
     for (size_t vn = 0; vn < PAGETABLE_NENTRIES; ++vn) {
-        uintptr_t pa = PAGEADDRESS(kernel_pagetable->entry[vn]);
         uintptr_t va = PAGEADDRESS(vn);
+        uintptr_t pa = va;
 
-        if ((va < PROC_START_ADDR) && (va != 0xB8000))
-            virtual_memory_map(kernel_pagetable, va, pa, PAGESIZE, PTE_P | PTE_W);
+        if (pa >= MEMSIZE_PHYSICAL) break;
+        if ((pa + PAGESIZE < MEMSIZE_PHYSICAL) && (va < PROC_START_ADDR) && (va != 0xB8000))
+            virtual_memory_map(kernel_pagetable, va, pa, PAGESIZE, PTE_P|PTE_W);
     }
     // Switch to the first process using run()
     run(&processes[1]);
