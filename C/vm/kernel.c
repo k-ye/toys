@@ -93,14 +93,6 @@ void kernel(const char* command) {
         processes[i].p_state = P_FREE;
     }
 
-    if (command && strcmp(command, "fork") == 0)
-        process_setup(1, 4);
-    else if (command && strcmp(command, "forkexit") == 0)
-        process_setup(1, 5);
-    else
-        for (pid_t i = 1; i <= 4; ++i)
-            process_setup(i, i - 1);
-
     for (size_t vn = 0; vn < PAGETABLE_NENTRIES; ++vn) {
         uintptr_t va = PAGEADDRESS(vn);
         uintptr_t pa = va;
@@ -109,6 +101,14 @@ void kernel(const char* command) {
         if ((pa + PAGESIZE < MEMSIZE_PHYSICAL) && (va < PROC_START_ADDR) && (va != 0xB8000))
             virtual_memory_map(kernel_pagetable, va, pa, PAGESIZE, PTE_P|PTE_W);
     }
+
+    if (command && strcmp(command, "fork") == 0)
+        process_setup(1, 4);
+    else if (command && strcmp(command, "forkexit") == 0)
+        process_setup(1, 5);
+    else
+        for (pid_t i = 1; i <= 4; ++i)
+            process_setup(i, i - 1);
     // Switch to the first process using run()
     run(&processes[1]);
 }
