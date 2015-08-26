@@ -76,6 +76,8 @@ void memshow_virtual_animate(void);
 uintptr_t find_free_page();
 x86_pagetable* copy_pagetable(x86_pagetable* pagetable, int8_t owner);
 
+int find_free_proc();
+
 // kernel(command)
 //    Initialize the hardware and processes and start running. The `command`
 //    string is an optional string passed from the boot loader.
@@ -172,6 +174,15 @@ x86_pagetable* copy_pagetable(x86_pagetable* pagetable, int8_t owner) {
     return l1_pagetable;
 }
 
+int find_free_proc() {
+    // skip slot 0
+    for (size_t i = 1; i < NPROC; ++i) {
+        if (processes[i].p_state == P_FREE)
+            return i;
+    }
+    return -1;
+}
+
 // physical_page_alloc(addr, owner)
 //    Allocates the page with physical address `addr` to the given owner.
 //    Fails if physical page `addr` was already allocated. Returns 0 on
@@ -245,6 +256,45 @@ void exception(x86_registers* reg) {
             virtual_memory_map(current->p_pagetable, addr, p_addr,
                                PAGESIZE, PTE_P|PTE_W|PTE_U);
         current->p_registers.reg_eax = r;
+        break;
+    }
+
+    case INT_SYS_FORK: {
+        int child_proc_i = find_free_proc();
+        if (child_proc_i == -1) {
+            current->p_registers.reg_eax = -1; // return -1 to the caller of "fork"
+            break;
+        }
+        
+        pid_t child_pid = processes[child_proc_i].p_pid;
+        x86_pagetable* child_pagetable = copy_pagetable(current->p_pagetable, child_pid);
+        // construct the correect child_pagetable
+        for (size_t vn = 0; vn < PAGETABLE_NENTRIES; ++vn) {
+            if (vn == PAGENUMBER(CONSOLE_ADDR)) continue;
+            
+            uintptr_t va = PAGEADDRESS(vn);
+            vamapping vam = virtual_memory_lookup(current->p_pagetable, va);
+            if ((vam.perm & PTE_P) && (vam.perm & PTE_U)) {
+                if (vam.perm & PTE_W) {
+                    uintptr_t child_pa = find_free_page();
+                    physical_page_alloc(child_pa, child_pid); // allocate a new physical page for P|W|U
+                    memcpy((char*)child_pa, (char*)(vam.pa), PAGESIZE); // copy data from vam.pa to child_pa
+                    virtual_memory_map(child_pagetable, va, child_pa, PAGESIZE, vam.perm); // map child proc's va to child_pa
+                }
+                else {
+                    size_t pn = PAGENUMBER(vam.pa);
+                    ++pageinfo[pn].refcount;
+                }
+            }
+        }
+        // copy registers from parent
+        processes[child_proc_i].p_registers = current->p_registers;
+        // change the return value of "fork()"
+        current->p_registers.reg_eax = child_pid;
+        processes[child_proc_i].p_registers.reg_eax = 0;
+
+        processes[child_proc_i].p_pagetable = child_pagetable;
+        processes[child_proc_i].p_state = P_RUNNABLE;
         break;
     }
 
@@ -499,3 +549,4 @@ void memshow_virtual_animate(void) {
         memshow_virtual(processes[showing].p_pagetable, s);
     }
 }
+

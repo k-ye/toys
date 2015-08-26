@@ -84,5 +84,15 @@ static int copyseg(proc* p, const elf_program* ph, const uint8_t* src) {
 
     memcpy((uint8_t*) va, src, end_file - va);
     memset((uint8_t*) end_file, 0, end_mem - end_file);
+
+    // Step 6: Detect read only and map it as read only application
+    if ((ph->p_flags & ELF_PFLAG_WRITE) == 0) {
+        for (uintptr_t page_va = va; page_va < end_mem; page_va += PAGESIZE) {
+	    vamapping vam = virtual_memory_lookup(p->p_pagetable, page_va);
+	    virtual_memory_map(p->p_pagetable, page_va, vam.pa, PAGESIZE, PTE_P|PTE_U);
+	} // end for
+    } // end if
+    
     return 0;
 }
+
