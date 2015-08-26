@@ -276,6 +276,8 @@ void virtual_memory_map(x86_pagetable* pagetable, uintptr_t va, uintptr_t pa,
     assert(sz % PAGESIZE == 0); // size is a multiple of PAGESIZE
     assert(va + sz >= va || va + sz == 0); // va range does not wrap
     if (perm & PTE_P) {
+        if (pa % PAGESIZE) 
+            log_printf("panic, va: %d, pa: %d", va, pa);
         assert(pa % PAGESIZE == 0); // physical addr is a multiple of PAGESIZE
         assert(pa + sz >= pa);      // physical address range does not wrap
         assert(pa + sz <= MEMSIZE_PHYSICAL); // physical addresses exist
