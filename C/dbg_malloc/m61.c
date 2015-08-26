@@ -124,7 +124,7 @@ void m61_free(void *ptr, const char *file, int line) {
                 printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not in heap\n", file, line, (unsigned int)ptr);
             } else if (!IS_TAIL_DATA_INTACT(ptr)) {
                 printf("MEMORY BUG: %s:%d: detected wild write during free of pointer 0x%x\n", file, line, (unsigned int)ptr);
-                abort();
+                //abort();
             } else {
                 m61_active_block * check_blk = max_actv_block;
                 while (check_blk && check_blk->mptr > (char *)ptr)
@@ -138,10 +138,10 @@ void m61_free(void *ptr, const char *file, int line) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x, not allocated\n", file, line, (unsigned int)ptr);
                     printf("  %s:%d: 0x%x is %zu bytes inside a %zu byte region allocated here\n", 
                         file, actual_line, (unsigned int)ptr, ptr_diff, actual_sz);
-                    abort();
+                    //abort();
                 } else if (!is_block_active(ptr)) {
                     printf("MEMORY BUG: %s:%d: invalid free of pointer 0x%x\n", file, line, (unsigned int)ptr);
-                    abort();
+                    //abort();
                 } else {
                     global_stats.nactive--;
                     global_stats.active_size -= GET_BLOCK_SIZE(ptr);
