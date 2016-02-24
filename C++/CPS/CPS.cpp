@@ -148,10 +148,14 @@ unsigned cps()
 
 int main()
 {
-	std::cout 
-	<< 
-		// ((\x. (\y. x + y)) 5) 6
+	std::cout
+	<<
+		"((\\x. (\\y. x + y)) 5) 6" << " = " <<
 		cps< ApplyExpr< ApplyExpr< LambdaExpr< 'x', LambdaExpr< 'y', AddExpr< VarExpr<'x'>, VarExpr<'y'>> > >, ConstExpr<5> >, ConstExpr<6> > > ()
+	<< std::endl
+	<<
+		" (\\x. (\\y.y + 3) 2 + x) 1" << " = " <<
+		cps< ApplyExpr< LambdaExpr<'x', AddExpr< ApplyExpr< LambdaExpr<'y', AddExpr< VarExpr<'y'>, ConstExpr<3> > >, ConstExpr<2> > , VarExpr<'x'> > > , ConstExpr<1> > >()
 	<< std::endl;
 	return 0;
 }
