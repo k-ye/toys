@@ -42,16 +42,23 @@ enum {
 	NSResizableWindowMask		= 1 << 3,
 };
 
-typedef id(*CMacsSimpleMessage)(id, SEL);
-typedef void(*CMacsVoidMessage)(id, SEL);
-typedef void(*CMacsVoidMessage1)(id, SEL, void *);
-typedef id(*CMacsRectMessage1)(id, SEL, CMRect);
-typedef id(*CMacsWindowInitMessage)(id, SEL, CMRect, int, int, bool);
+template <typename R, typename O, typename... Args>
+R cast_call(O *i, const char *select, Args... args) {
+  using func = R (*)(id, SEL, Args...);
+  return ((func)(objc_msgSend))(reinterpret_cast<id>(i), sel_getUid(select),
+                                args...);
+}
 
-extern CMacsSimpleMessage cmacs_simple_msgSend;
-extern CMacsVoidMessage cmacs_void_msgSend;
-extern CMacsVoidMessage1 cmacs_void_msgSend1;
-extern CMacsRectMessage1 cmacs_rect_msgSend1;
-extern CMacsWindowInitMessage cmacs_window_init_msgSend;
+template <typename O, typename... Args>
+id call(O *i, const char *select, Args... args) {
+  return cast_call<id>(i, select, args...);
+}
+
+template <typename R = id, typename... Args>
+R clscall(const char *class_name, const char *select, Args... args) {
+  using func = R (*)(id, SEL, Args...);
+  return ((func)(objc_msgSend))((id)objc_getClass(class_name),
+                                sel_getUid(select), args...);
+}
 
 #endif

@@ -113,7 +113,7 @@ int main() {
 
   // create the application object
   NSApp = [NSApplication sharedApplication];
-  // [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+  [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
   printf("ActivationPolicy=%d\n", [NSApp activationPolicy]);
   [NSApp activateIgnoringOtherApps:YES];
 
@@ -122,11 +122,14 @@ int main() {
 
   // run the main event loop
   while (true) {
+    NSDate *start = [NSDate date];
     [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantPast]];
     NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask
                                         untilDate:[NSDate distantPast]
                                            inMode:NSDefaultRunLoopMode
                                           dequeue:YES];
+    NSTimeInterval timeInterval = [start timeIntervalSinceNow];
+    printf("timeInterval=%f millis\n", timeInterval * 1000.0);  
     [NSApp sendEvent:event];
 
     // Some code is execute here every frame to do some tasks...
