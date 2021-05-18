@@ -163,14 +163,12 @@ public:
   }
 
   template <typename T, typename... Args>
-  void operator()(const char *, const T &t, Args &&... rest) {
+  void HHH(const char *, const T &t, Args &&... rest) {
     this->operator()(nullptr, t);
-    this->operator()(nullptr, std::forward<Args>(rest)...);
+    this->HHH(nullptr, std::forward<Args>(rest)...);
   }
 
-  template <typename T> void operator()(const T &val) {
-    this->operator()(nullptr, val);
-  }
+  template <typename T> void HHH(const T &val) { this->HHH(nullptr, val); }
 
 private:
   template <typename M> void handle_associative_container(const M &val) {
@@ -184,7 +182,7 @@ private:
 };
 
 #define TI_IO(...)                                                             \
-  { serializer(#__VA_ARGS__, __VA_ARGS__); }
+  { serializer.HHH(#__VA_ARGS__, __VA_ARGS__); }
 
 #define TI_IO_DEF(...)                                                         \
   template <typename S> void io(S &serializer) const { TI_IO(__VA_ARGS__) }
@@ -199,7 +197,7 @@ struct Parent {
       return a == other.a && b == other.b && c == other.c;
     }
 
-    // TI_IO_DEF(a, b, c);
+    TI_IO_DEF(a, b, c);
   };
 
   std::optional<Child> b;
@@ -209,11 +207,11 @@ struct Parent {
     return b == other.b && c == other.c;
   }
 
-  // TI_IO_DEF(b, c);
+  TI_IO_DEF(b, c);
 };
 
 int main() {
   Parent p;
   BinarySerializer bs;
-  bs(p);
+  bs.HHH(p);
 }
