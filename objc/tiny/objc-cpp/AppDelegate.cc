@@ -59,7 +59,8 @@ static constexpr int kNumPixels = kWidth * kHeight;
 id window;
 id view;
 
-void redraw(id self, SEL, CGRect) {
+// void redraw(id self, SEL, CGRect) {
+void updateLayer(id self, SEL) {
   printf("redrawing frame=%d\n", frame);
   std::vector<uint8_t> img_data(kNumPixels * 4, 0);
   const int color = (frame / 200) % (255 - 100) + 100;
@@ -79,7 +80,7 @@ void redraw(id self, SEL, CGRect) {
   // CGRect rect{{0, 0}, {CGFloat(kWidth), CGFloat(kHeight)}};
   // CGContextDrawImage(context, rect, image);
   call(call(view, "layer"), "setContents:", image);
-  clscall("CATransaction", "flush");
+  printf("wantsUpdateLayer=%d\n", (intptr_t)call(view, "wantsUpdateLayer"));
   // [CATransaction flush];
 
   CGImageRelease(image);
@@ -94,7 +95,8 @@ __attribute__((constructor)) static void CreateAppDelegate() {
   // of this method, as I do not know the @encode sequence of 'CGRect' off
   // of the top of my head. As a result, there is a chance that the rect
   // parameter of the method may not get passed properly.
-  class_addMethod(ViewClass, sel_getUid("drawRect:"), (IMP)redraw, "v@:");
+  // class_addMethod(ViewClass, sel_getUid("drawRect:"), (IMP)redraw, "v@:");
+  class_addMethod(ViewClass, sel_getUid("updateLayer"), (IMP)updateLayer, "v@:");
   objc_registerClassPair(ViewClass);
 
   AppDelClass = objc_allocateClassPair((Class)objc_getClass("NSObject"),

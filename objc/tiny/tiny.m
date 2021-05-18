@@ -9,6 +9,9 @@
 
 #import <Cocoa/Cocoa.h>  // include the Cocoa Frameworks
 
+int frame = 0;
+NSWindow *myWindow;  // typed pointer to NSWindow object
+NSView *myView;      // typed pointer to NSView object
 /************************************************************
  ** A DemoView instance object of this class draws the image.
  ************************************************************/
@@ -16,41 +19,42 @@
 @interface DemoView : NSView  // interface of DemoView class
 {                             // (subclass of NSView class)
 }
-- (void)drawRect:(NSRect)rect;  // instance method interface
+// - (void)drawRect:(NSRect)rect;  // instance method interface
+- (void)updateLayer;
 @end
 
 @implementation DemoView  // implementation of DemoView class
 
-#define X(t) (sin(t) + 1) * width * 0.5   // macro for X(t)
-#define Y(t) (cos(t) + 1) * height * 0.5  // macro for Y(t)
-
-- (void)drawRect:(NSRect)rect  // instance method implementation
-{
-  double f, g;
-  double const pi = 2 * acos(0.0);
-
-  int n = 12;  // number of sides of the polygon
-
+- (void)updateLayer {
   // get the size of the application's window and view objects
-  float width = [self bounds].size.width;
-  float height = [self bounds].size.height;
+  int width = [self bounds].size.width;
+  int height = [self bounds].size.height;
 
-  [[NSColor whiteColor] set];  // set the drawing color to white
-  NSRectFill([self bounds]);   // fill the view with white
+  CGColorSpaceRef rgb = CGColorSpaceCreateWithName(kCGColorSpaceLinearSRGB);
+  CGContextRef gc = CGBitmapContextCreate(NULL, width, height, 8, 0, rgb,
+                                          kCGImageByteOrder32Big | kCGImageAlphaPremultipliedLast);
+  CGColorSpaceRelease(rgb);
 
-  // the following statements trace two polygons with n sides
-  // and connect all of the vertices with lines
-
-  [[NSColor blackColor] set];  // set the drawing color to black
-
-  for (f = 0; f < 2 * pi; f += 2 * pi / n) {  // draw the fancy pattern
-    for (g = 0; g < 2 * pi; g += 2 * pi / n) {
-      NSPoint p1 = NSMakePoint(X(f), Y(f));
-      NSPoint p2 = NSMakePoint(X(g), Y(g));
-      [NSBezierPath strokeLineFromPoint:p1 toPoint:p2];
+  size_t pitch = CGBitmapContextGetBytesPerRow(gc);
+  uint8_t *buffer = CGBitmapContextGetData(gc);
+  int color = (frame / 500) % (256 - 20) + 20;
+  for (size_t y = 0; y < height; ++y) {
+    for (size_t x = 0; x < width; ++x) {
+      int index = 4 * (x + y * width);
+      buffer[index++] = color;
+      buffer[index++] = 0;
+      buffer[index++] = 0;
+      buffer[index++] = 255;  // alpha
     }
   }
 
+  CGImageRef image = CGBitmapContextCreateImage(gc);
+  CGContextRelease(gc);
+  // CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+  // CGContextDrawImage(context, rect, image);
+  // self.window.contentView.wantsLayer = YES;
+  myView.layer.contents = (__bridge id)image;
+  CGImageRelease(image);
 }  // end of drawRect: override method
 
 /* windowWillClose: is a delegate method that gets invoked when
@@ -62,18 +66,7 @@
   [NSApp terminate:self];
 }
 
-- (BOOL)canBecomeKeyWindow {
-  return YES;
-}
-
-- (BOOL)canBecomeMainWindow {
-  return YES;
-}
-
-- (void)keyDown:(NSEvent *)theEvent {
-  printf("keydown\n");
-}
-
+// - (BOOL) wantsUpdateLayer { return YES; }
 @end  // end of DemoView implementation
 
 /*
@@ -81,14 +74,11 @@
  * loading a nib file.
  */
 
-NSWindow *myWindow;  // typed pointer to NSWindow object
-
 void setup() {
-  NSView *myView;       // typed pointer to NSView object
   NSRect graphicsRect;  // contains an origin, width, height
 
   // initialize the rectangle variable
-  graphicsRect = NSMakeRect(100.0, 350.0, 400.0, 400.0);
+  graphicsRect = NSMakeRect(0, 0, 400.0, 400.0);
 
   myWindow = [[NSWindow alloc]  // create the window
       initWithContentRect:graphicsRect
@@ -100,10 +90,11 @@ void setup() {
 
   // create amd initialize the DemoView instance
   myView = [[[DemoView alloc] initWithFrame:graphicsRect] autorelease];
+  [myView setWantsLayer:YES];
 
   [myWindow setContentView:myView];  // set window's view
 
-  [myWindow setDelegate:myView];  // set window's delegate
+  [myWindow setDelegate:myView];             // set window's delegate
   [myWindow makeKeyAndOrderFront:myWindow];  // display window
 }
 
@@ -122,20 +113,17 @@ int main() {
 
   // run the main event loop
   while (true) {
-    NSDate *start = [NSDate date];
+    ++frame;
+    [myView setNeedsDisplay:YES];
+    // NSDate *start = [NSDate date];
     [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantPast]];
     NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask
                                         untilDate:[NSDate distantPast]
                                            inMode:NSDefaultRunLoopMode
                                           dequeue:YES];
-    NSTimeInterval timeInterval = [start timeIntervalSinceNow];
-    printf("timeInterval=%f millis\n", timeInterval * 1000.0);  
+    // NSTimeInterval timeInterval = [start timeIntervalSinceNow];
+    // printf("timeInterval=%f millis\n", timeInterval * 1000.0);
     [NSApp sendEvent:event];
-
-    // Some code is execute here every frame to do some tasks...
-    if (event != NULL) {
-      // printf("got event! type=%d\n", [event type]);
-    }
   }
 
   // we get here when the window is closed
